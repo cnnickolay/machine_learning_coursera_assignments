@@ -1,20 +1,8 @@
 package regression_week_2
 
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.{LabeledPoint, LinearRegressionModel, LinearRegressionWithSGD}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.functions.{lit, _}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, SQLContext}
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.functions._
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.{LabeledPoint, LinearRegressionModel, LinearRegressionWithSGD}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
 import org.apache.spark.{SparkConf, SparkContext}
 
 
