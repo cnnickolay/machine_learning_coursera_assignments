@@ -20,10 +20,10 @@ object Assignment1 {
     val customSchema = StructType(Array(
       StructField("id", StringType, nullable = false),
       StructField("date", StringType, nullable = false),
-      StructField("price", FloatType, nullable = false),
-      StructField("bedrooms", FloatType, nullable = false),
-      StructField("bathrooms", FloatType, nullable = false),
-      StructField("sqft_living", FloatType, nullable = false),
+      StructField("price", DoubleType, nullable = false),
+      StructField("bedrooms", DoubleType, nullable = false),
+      StructField("bathrooms", DoubleType, nullable = false),
+      StructField("sqft_living", DoubleType, nullable = false),
       StructField("sqft_lot", IntegerType, nullable = false),
       StructField("floors", StringType, nullable = false),
       StructField("waterfront", IntegerType, nullable = false),
@@ -35,10 +35,10 @@ object Assignment1 {
       StructField("yr_built", IntegerType, nullable = false),
       StructField("yr_renovated", IntegerType, nullable = false),
       StructField("zipcode", StringType, nullable = false),
-      StructField("lat", FloatType, nullable = false),
-      StructField("long", FloatType, nullable = false),
-      StructField("sqft_living15", FloatType, nullable = false),
-      StructField("sqft_lot15", FloatType, nullable = false)
+      StructField("lat", DoubleType, nullable = false),
+      StructField("long", DoubleType, nullable = false),
+      StructField("sqft_living15", DoubleType, nullable = false),
+      StructField("sqft_lot15", DoubleType, nullable = false)
     ))
 
     val df = sqlContext.read
@@ -52,10 +52,10 @@ object Assignment1 {
       .schema(customSchema)
       .load(testDataFile)
 
-    val toIntSingleArgument = udf[Float, Float](a => a * a)
-    val log = udf[Float, Float](a => Math.log(a.toDouble).toFloat)
-    val toIntDoubleArgument = udf[Float, Float, Float]((a, b) => a * b)
-    val toIntDoubleArgumentSumm = udf[Float, Float, Float]((a, b) => a + b)
+    val toIntSingleArgument = udf[Double, Double](a => a * a)
+    val log = udf[Double, Double](a => Math.log(a.toDouble).toDouble)
+    val toIntDoubleArgument = udf[Double, Double, Double]((a, b) => a * b)
+    val toIntDoubleArgumentSumm = udf[Double, Double, Double]((a, b) => a + b)
 
     val testDataAugmented = testDf
       .withColumn("bedrooms_squared", toIntSingleArgument(testDf("bedrooms")))
@@ -70,72 +70,72 @@ object Assignment1 {
       .withColumn("lat_plus_long", toIntDoubleArgumentSumm(df("lat"), df("long")))
 
     val dataTrain1 = df_augmented.rdd.zipWithIndex().collect { case (row, idx) =>
-      LabeledPoint(row.getAs[Float]("price"),
+      LabeledPoint(row.getAs[Double]("price"),
         Vectors.dense(
-          row.getAs[Float]("sqft_living"),
-          row.getAs[Float]("bedrooms"),
-          row.getAs[Float]("bathrooms"),
-          row.getAs[Float]("lat"),
-          row.getAs[Float]("long")))
+          row.getAs[Double]("sqft_living"),
+          row.getAs[Double]("bedrooms"),
+          row.getAs[Double]("bathrooms"),
+          row.getAs[Double]("lat"),
+          row.getAs[Double]("long")))
     }.cache()
     val dataTrain2 = df_augmented.rdd.zipWithIndex().collect { case (row, idx) =>
-      LabeledPoint(row.getAs[Float]("price"),
+      LabeledPoint(row.getAs[Double]("price"),
         Vectors.dense(
-          row.getAs[Float]("sqft_living"),
-          row.getAs[Float]("bedrooms"),
-          row.getAs[Float]("bathrooms"),
-          row.getAs[Float]("lat"),
-          row.getAs[Float]("long"),
-          row.getAs[Float]("bed_bath_rooms")
+          row.getAs[Double]("sqft_living"),
+          row.getAs[Double]("bedrooms"),
+          row.getAs[Double]("bathrooms"),
+          row.getAs[Double]("lat"),
+          row.getAs[Double]("long"),
+          row.getAs[Double]("bed_bath_rooms")
         ))
     }.cache()
     val dataTrain3 = df_augmented.rdd.zipWithIndex().collect { case (row, idx) =>
-      LabeledPoint(row.getAs[Float]("price"),
+      LabeledPoint(row.getAs[Double]("price"),
         Vectors.dense(
-          row.getAs[Float]("sqft_living"),
-          row.getAs[Float]("bedrooms"),
-          row.getAs[Float]("bathrooms"),
-          row.getAs[Float]("lat"),
-          row.getAs[Float]("long"),
-          row.getAs[Float]("bed_bath_rooms"),
-          row.getAs[Float]("bedrooms_squared"),
-          row.getAs[Float]("log_sqft_living"),
-          row.getAs[Float]("lat_plus_long")
+          row.getAs[Double]("sqft_living"),
+          row.getAs[Double]("bedrooms"),
+          row.getAs[Double]("bathrooms"),
+          row.getAs[Double]("lat"),
+          row.getAs[Double]("long"),
+          row.getAs[Double]("bed_bath_rooms"),
+          row.getAs[Double]("bedrooms_squared"),
+          row.getAs[Double]("log_sqft_living"),
+          row.getAs[Double]("lat_plus_long")
         ))
     }.cache()
     val dataTest3 = testDataAugmented.rdd.zipWithIndex().collect { case (row, idx) =>
-      LabeledPoint(row.getAs[Float]("price"),
+      LabeledPoint(row.getAs[Double]("price"),
         Vectors.dense(
-          row.getAs[Float]("sqft_living"),
-          row.getAs[Float]("bedrooms"),
-          row.getAs[Float]("bathrooms"),
-          row.getAs[Float]("lat"),
-          row.getAs[Float]("long"),
-          row.getAs[Float]("bed_bath_rooms"),
-          row.getAs[Float]("bedrooms_squared"),
-          row.getAs[Float]("log_sqft_living"),
-          row.getAs[Float]("lat_plus_long")
+          row.getAs[Double]("sqft_living"),
+          row.getAs[Double]("bedrooms"),
+          row.getAs[Double]("bathrooms"),
+          row.getAs[Double]("lat"),
+          row.getAs[Double]("long"),
+          row.getAs[Double]("bed_bath_rooms"),
+          row.getAs[Double]("bedrooms_squared"),
+          row.getAs[Double]("log_sqft_living"),
+          row.getAs[Double]("lat_plus_long")
         ))
     }.cache()
     val dataTest2 = testDataAugmented.rdd.zipWithIndex().collect { case (row, idx) =>
-      LabeledPoint(row.getAs[Float]("price"),
+      LabeledPoint(row.getAs[Double]("price"),
         Vectors.dense(
-          row.getAs[Float]("sqft_living"),
-          row.getAs[Float]("bedrooms"),
-          row.getAs[Float]("bathrooms"),
-          row.getAs[Float]("lat"),
-          row.getAs[Float]("long"),
-          row.getAs[Float]("bed_bath_rooms")
+          row.getAs[Double]("sqft_living"),
+          row.getAs[Double]("bedrooms"),
+          row.getAs[Double]("bathrooms"),
+          row.getAs[Double]("lat"),
+          row.getAs[Double]("long"),
+          row.getAs[Double]("bed_bath_rooms")
         ))
     }.cache()
     val dataTest1 = testDataAugmented.rdd.zipWithIndex().collect { case (row, idx) =>
-      LabeledPoint(row.getAs[Float]("price"),
+      LabeledPoint(row.getAs[Double]("price"),
         Vectors.dense(
-          row.getAs[Float]("sqft_living"),
-          row.getAs[Float]("bedrooms"),
-          row.getAs[Float]("bathrooms"),
-          row.getAs[Float]("lat"),
-          row.getAs[Float]("long")))
+          row.getAs[Double]("sqft_living"),
+          row.getAs[Double]("bedrooms"),
+          row.getAs[Double]("bathrooms"),
+          row.getAs[Double]("lat"),
+          row.getAs[Double]("long")))
     }.cache()
 
 

@@ -17,6 +17,7 @@ import com.quantifind.charts.Highcharts._
 import com.quantifind.charts.highcharts._
 import com.quantifind.charts.repl.IterablePair
 import org.apache.spark.rdd.RDD
+import util.Regression
 
 import scala.collection.immutable.NumericRange
 import scala.collection.immutable.Range._
@@ -73,15 +74,17 @@ object Assignment {
 
     val toIntDoubleArgument = udf[Double, Int, Double]{(power, value) => Math.pow(power, value)}
 
+
+
     def polynomialDataFrame(originalDf: DataFrame, column: String, degree: Integer): DataFrame = {
       var df = originalDf.withColumn("power_1", originalDf(column))
-      for (power <- 1 to degree) {
+      for (power <- 0 to degree) {
         df = df.withColumn(s"power_$power", toIntDoubleArgument(originalDf(column), lit(power)))
       }
       df
     }
 
-    def extractDoubleList(df: DataFrame, column: String): List[Double] = df.rdd.map(_.getAs[Double]("column")).collect().toList
+    def extractDoubleList(df: DataFrame, column: String): List[Double] = df.rdd.map(_.getAs[Double](column)).collect().toList
 
     def buildPlot(initialDataFrame: DataFrame, labeledPoint: (DataFrame => RDD[LabeledPoint]),
                   degree: Int, initialStep: Double, transformationColumn: String,
@@ -140,17 +143,17 @@ object Assignment {
     }
 
     def renderPlot(title: String, xAxis: String)(df: DataFrame): Unit = {
-        val series1: Series = Series(df.select(xAxis, "price").collect().zipWithIndex.collect { case (row, idx) if idx % 100 == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
-        val series2: Series = Series(df.select(xAxis, "predicted").collect().zipWithIndex.collect { case (row, idx) if idx % 100 == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
+      val series1: Series = Series(df.select(xAxis, "price").collect().zipWithIndex.collect { case (row, idx) if idx % 100 == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
+      val series2: Series = Series(df.select(xAxis, "predicted").collect().zipWithIndex.collect { case (row, idx) if idx % 100 == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
 
-        val chart = Highchart(Seq(series1, series2), chart = Some(Chart(zoomType = Some(Zoom.xy))), yAxis = None, title = Some(Title(title)))
-        plot(chart)
+      val chart = Highchart(Seq(series1, series2), chart = Some(Chart(zoomType = Some(Zoom.xy))), yAxis = None, title = Some(Title(title)))
+      plot(chart)
     }
 
-    buildPlot(
-      kcHouseData.select("sqft_living", "price"),
-      df => df.select("price", "sqft_living").rdd.map(row => LabeledPoint(row.getAs[Double](0), Vectors.dense(row.getAs[Double](1)))),
-      1, 1E-5, "sqft_living", renderPlot("1st order", "sqft_living"))
+//    buildPlot(
+//      kcHouseData.select("sqft_living", "price"),
+//      df => df.select("price", "sqft_living").rdd.map(row => LabeledPoint(row.getAs[Double](0), Vectors.dense(row.getAs[Double](1)))),
+//      1, 1E-5, "sqft_living", renderPlot("1st order", "sqft_living"))
 //    buildPlot(
 //      kcHouseData.select("sqft_living", "price"),
 //      df => df.select("price", "power_1", "power_2").rdd.map(row => LabeledPoint(row.getAs[Double](0), Vectors.dense(row.getAs[Double](1), row.getAs[Double](2)))),
@@ -167,5 +170,35 @@ object Assignment {
 //      kcHouseData.select("sqft_living", "price"),
 //      df => df.select("price", "power_1", "power_2", "power_3", "power_4", "power_5").rdd.map(row => LabeledPoint(row.getAs[Double](0), Vectors.dense(row.getAs[Double](1), row.getAs[Double](2), row.getAs[Double](3), row.getAs[Double](4), row.getAs[Double](5)))),
 //      5, 1E-30, "sqft_living", renderPlot("5rd order", "sqft_living"))
+
+//    val weights_1 = Regression.regressionGradientDescent(kcHouseData.select("sqft_living"), extractDoubleList(kcHouseData, "price"), List(263.0850134528269), 0.0000000000001, 0.0001)
+//    val kcHouseDataAugmented_1 = Regression.predict(kcHouseData, List("sqft_living"), weights_1)
+//    kcHouseDataAugmented_1.select("sqft_living", "price", "predicted").show()
+
+    def calculateRSS(df: DataFrame): Double = {
+      df.rdd.map(row => Math.pow(row.getAs[Double]("price") - row.getAs[Double]("predicted"), 2)).sum()
+    }
+
+    val kcHouseDataPol = polynomialDataFrame(kcHouseData, "sqft_living", 15)
+    val trainDataPol = polynomialDataFrame(trainData, "sqft_living", 15)
+    val validationDataPol = polynomialDataFrame(validData, "sqft_living", 15)
+    val testDataPol = polynomialDataFrame(testData, "sqft_living", 15)
+    validationDataPol.show()
+
+    (1 to 16 by 1).foreach { idx =>
+      val features = (0 to idx).map("power_"+_).toList
+      val weights = Regression.regressionGradientDescent(trainDataPol.select(features.head, features.tail: _*), extractDoubleList(trainDataPol, "price"), List.fill(idx-1)(0d) ::: 100d :: Nil, 0.00001, 0.00000001, maxSteps = Some(100))
+      val trainDataAugmented = Regression.predict(trainDataPol, features, weights)
+      val testDataAugmented = Regression.predict(testDataPol, features, weights)
+      val validationDataAugmented = Regression.predict(validationDataPol, features, weights)
+      println(s"----------- $idx")
+      renderPlot(idx.toString, "sqft_living")(validationDataAugmented)
+      println(s"weights $weights")
+      println(s"RSS train ${calculateRSS(trainDataAugmented)}")
+      println(s"RSS validation ${calculateRSS(validationDataAugmented)}")
+      println(s"RSS test ${calculateRSS(testDataAugmented)}")
+    }
+
   }
+
 }
