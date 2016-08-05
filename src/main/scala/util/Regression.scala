@@ -40,22 +40,22 @@ object Regression {
       val featureValues = extractFeatureValues(column, df)
       -featureDerivative(errors, featureValues)
     }.toList
-    val updatedWeights: List[Double] = (partials, _initialWeights).zipped.map {
-      case (partial, initialWeight) => initialWeight - stepSize * partial
+    val updatedWeights: List[Double] = (partials, _initialWeights).zipped.map { case (partial, initialWeight) =>
+        initialWeight - stepSize * partial
     }
 
     val rmse = RMSE(df, observations, _initialWeights)
     val rmseWithUpdatedWeights = RMSE(df, observations, updatedWeights)
 
     val errorDiff = rmse - rmseWithUpdatedWeights
-    val gradientMagnitude = Math.sqrt(partials.map(Math.pow(_, 2)).sum)
-    println(s"error diff $errorDiff")
-    println(s"gradient magnitude $gradientMagnitude, weights ${_initialWeights}")
+//    val gradientMagnitude = Math.sqrt(partials.map(Math.pow(_, 2)).sum)
+    println(s"error diff $errorDiff weights ${_initialWeights}")
+//    println(s"gradient magnitude $gradientMagnitude, weights ${_initialWeights}")
 
     if (errorDiff > 0 && errorDiff > errorDiffThreshold) {
       if (currentStep.getOrElse(0) >= maxSteps.getOrElse(Int.MaxValue)) _initialWeights else regressionGradientDescent(df, observations, updatedWeights, stepSize, errorDiffThreshold, Some(currentStep.getOrElse(0) + 1), maxSteps)
     }
-    else if (errorDiff < 0) regressionGradientDescent(df, observations, _initialWeights, stepSize / 10, errorDiffThreshold, currentStep, maxSteps)
+    else if (errorDiff < 0) { println(s"adjusting step $stepSize"); regressionGradientDescent(df, observations, _initialWeights, stepSize / 10, errorDiffThreshold, currentStep, maxSteps) }
     else { println(s"weights found ${_initialWeights} with error diff $errorDiff"); _initialWeights }
   }
 
@@ -70,8 +70,8 @@ object Regression {
   }
 
   def renderPlot(title: String, xAxis: String, yAxis: String, predictedYAxis: String, filterRatio: Int)(df: DataFrame): Unit = {
-    val series1: Series = Series(df.select(xAxis, yAxis).collect().zipWithIndex.collect { case (row, idx) if idx % filterRatio == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
-    val series2: Series = Series(df.select(xAxis, predictedYAxis).collect().zipWithIndex.collect { case (row, idx) if idx % filterRatio == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
+    val series1: Series = Series(name = Some("observations"), data = df.select(xAxis, yAxis).collect().zipWithIndex.collect { case (row, idx) if idx % filterRatio == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
+    val series2: Series = Series(name = Some("prediction"), data = df.select(xAxis, predictedYAxis).collect().zipWithIndex.collect { case (row, idx) if idx % filterRatio == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
 
     val chart = Highchart(Seq(series1, series2), chart = Some(Chart(zoomType = Some(Zoom.xy))), yAxis = None, title = Some(Title(title)))
     plot(chart)
