@@ -26,6 +26,88 @@ import scala.collection.immutable.Range._
 
 
 object Assignment {
+
+  def renderPlot(title: String, xAxis: String, yAxis: String)(df: DataFrame): Unit = {
+    val series1: Series = Series(df.select(xAxis, yAxis).collect().zipWithIndex.collect { case (row, idx) if idx % 100 == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
+    val series2: Series = Series(df.select(xAxis, "predicted").collect().zipWithIndex.collect { case (row, idx) if idx % 100 == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
+
+    val chart = Highchart(Seq(series1, series2), chart = Some(Chart(zoomType = Some(Zoom.xy))), yAxis = None, title = Some(Title(title)))
+    plot(chart)
+  }
+
+  val toIntDoubleArgument = udf[Double, Double, Int]{(value, power) => Math.pow(value, power)}
+
+  def polynomialDataFrame(originalDf: DataFrame, column: String, degree: Integer): DataFrame = {
+    var df = originalDf.withColumn("power_1", originalDf(column))
+    for (power <- 0 to degree) {
+      df = df.withColumn(s"power_$power", toIntDoubleArgument(originalDf(column), lit(power)))
+    }
+    df
+  }
+
+  def buildPlot(initialDataFrame: DataFrame, labeledPoint: (Row => LabeledPoint),
+                degree: Int, initialStep: Double, transformationColumn: String,
+                renderGraph: (DataFrame => Unit)) = {
+    val poly1Data = polynomialDataFrame(initialDataFrame, transformationColumn, degree)
+    poly1Data.show()
+    val poly1DataLabeledPointsRDD = poly1Data.rdd.map(row => labeledPoint(row))
+    val poly1DataModelConfig = new LinearRegressionWithSGD().setIntercept(true)
+    poly1DataModelConfig.optimizer.setNumIterations(100)
+
+    def findApproximation(prevModel: Option[LinearRegressionModel], step: Double): LinearRegressionModel = {
+      poly1DataModelConfig.optimizer.setStepSize(step)
+      val model = poly1DataModelConfig.run(poly1DataLabeledPointsRDD)
+      prevModel match {
+        case Some(_prevModel) => println(s"step $step prevmodel weight ${_prevModel.weights(0)}, nextmodel weight ${model.weights(0)}")
+        case None => println(s"step $step nextmodel weight ${model.weights(0)}")
+      }
+
+      prevModel match {
+//        case Some(_prevModel) if step < 1E-100 => _prevModel
+//        case Some(_prevModel) if _prevModel.weights.toArray.product.isNaN && model.weights.toArray.product.isNaN => findApproximation(Some(model), step / 10)
+//        case Some(_prevModel) if !_prevModel.weights.toArray.product.isNaN && model.weights.toArray.product.isNaN => _prevModel
+//        case Some(_prevModel) if _prevModel.weights.toArray.product.isNaN && !model.weights.toArray.product.isNaN => findApproximation(Some(model), step / 10)
+        case Some(_prevModel) =>
+          val firstRow = poly1DataLabeledPointsRDD.first()
+          val calculateRMSE: ((LinearRegressionModel, RDD[LabeledPoint]) => Double) = {
+            (model, points) =>
+              val predicted = model.predict(points.map(_.features)).collect()
+              val averageError = (predicted, points.map(_.label).collect()).zipped.map {
+                case (predict, observation) => Math.pow(predict - observation, 2)
+              }.sum / points.count()
+              Math.sqrt(averageError)
+          }
+          val prevModelError = calculateRMSE(_prevModel, poly1DataLabeledPointsRDD)
+          val modelError = calculateRMSE(model, poly1DataLabeledPointsRDD)
+          println(s"label ${firstRow.label}, prev predict error $prevModelError, next predict error $modelError")
+          println(s"Model weights ${model.intercept} ${model.weights}")
+          if (prevModelError.isNaN && modelError.isNaN) findApproximation(Some(model), step / 10)
+          else if (prevModelError.isNaN && !modelError.isNaN) findApproximation(Some(model), step / 10)
+          else if (!prevModelError.isNaN && modelError.isNaN) _prevModel
+          else if (prevModelError.isInfinity || modelError.isInfinity) findApproximation(Some(model), step / 10)
+          else if (prevModelError > modelError) {
+//            println(s"label ${firstRow.label}, prev predict error $prevModelError, next predict error $modelError")
+            findApproximation(Some(model), step / 10)
+          } else _prevModel
+        case None => findApproximation(Some(model), step / 10)
+      }
+    }
+    val model = findApproximation(None, initialStep)
+
+    val augmentedRows = poly1Data.rdd.map { row =>
+      val prediction = model.predict(labeledPoint(row).features)
+      val values = row.toSeq.toList ::: prediction :: Nil
+      Row(values: _*)
+    }
+    val poly1DataAugmented = poly1Data.sqlContext.createDataFrame(augmentedRows, poly1Data.schema.add("predicted", DoubleType))
+
+    poly1DataAugmented.show()
+
+    renderGraph(poly1DataAugmented)
+    poly1DataAugmented
+  }
+
+
   def main(args: Array[String]) {
     val kcHouseDataFile = "src/main/scala/regression_week_3/kc_house_data.csv"
     val set1DataFile = "src/main/scala/regression_week_3/wk3_kc_house_set_1_data.csv"
@@ -72,83 +154,7 @@ object Assignment {
     val trainData = sqlContext.read.format("com.databricks.spark.csv").option("header", "true").schema(customSchema).load(trainDataFile)
     val validData = sqlContext.read.format("com.databricks.spark.csv").option("header", "true").schema(customSchema).load(validDataFile)
 
-    val toIntDoubleArgument = udf[Double, Int, Double]{(power, value) => Math.pow(power, value)}
-
-
-
-    def polynomialDataFrame(originalDf: DataFrame, column: String, degree: Integer): DataFrame = {
-      var df = originalDf.withColumn("power_1", originalDf(column))
-      for (power <- 0 to degree) {
-        df = df.withColumn(s"power_$power", toIntDoubleArgument(originalDf(column), lit(power)))
-      }
-      df
-    }
-
     def extractDoubleList(df: DataFrame, column: String): List[Double] = df.rdd.map(_.getAs[Double](column)).collect().toList
-
-    def buildPlot(initialDataFrame: DataFrame, labeledPoint: (DataFrame => RDD[LabeledPoint]),
-                  degree: Int, initialStep: Double, transformationColumn: String,
-                  renderGraph: (DataFrame => Unit)) = {
-      val poly1Data = polynomialDataFrame(initialDataFrame, transformationColumn, degree)
-      val poly1DataLabeledPointsRDD = labeledPoint(poly1Data)
-      val poly1DataModelConfig = new LinearRegressionWithSGD().setIntercept(true)
-      poly1DataModelConfig.optimizer.setNumIterations(200)
-
-      def findApproximation(prevModel: Option[LinearRegressionModel], step: Double): LinearRegressionModel = {
-        poly1DataModelConfig.optimizer.setStepSize(step)
-        val model = poly1DataModelConfig.run(poly1DataLabeledPointsRDD)
-        prevModel match {
-          case Some(_prevModel) => println(s"step $step prevmodel weight ${_prevModel.weights(0)}, nextmodel weight ${model.weights(0)}")
-          case None => println(s"step $step nextmodel weight ${model.weights(0)}")
-        }
-
-        prevModel match {
-          case Some(_prevModel) if step < 1E-100 => _prevModel
-          case Some(_prevModel) if _prevModel.weights.toArray.product.isNaN && model.weights.toArray.product.isNaN => findApproximation(Some(model), step / 10)
-          case Some(_prevModel) if !_prevModel.weights.toArray.product.isNaN && model.weights.toArray.product.isNaN => _prevModel
-          case Some(_prevModel) if _prevModel.weights.toArray.product.isNaN && !model.weights.toArray.product.isNaN => findApproximation(Some(model), step / 10)
-          case Some(_prevModel) =>
-            val firstRow = poly1DataLabeledPointsRDD.first()
-            val calculateRMSE: ((LinearRegressionModel, RDD[LabeledPoint]) => Double) = {
-              (model, points) =>
-                val predicted = model.predict(points.map(_.features)).collect()
-                val averageError = (predicted, points.map(_.label).collect()).zipped.map {
-                  case (predict, observation) => Math.pow(predict - observation, 2)
-                }.sum / points.count()
-                Math.sqrt(averageError)
-            }
-            val prevModelError = calculateRMSE(_prevModel, poly1DataLabeledPointsRDD)
-            val modelError = calculateRMSE(model, poly1DataLabeledPointsRDD)
-            if (prevModelError.isNaN && modelError.isNaN) findApproximation(Some(model), step / 10)
-            else if (prevModelError.isNaN && !modelError.isNaN) findApproximation(Some(model), step / 10)
-            else if (!prevModelError.isNaN && modelError.isNaN) _prevModel
-            else if (prevModelError.isInfinity || modelError.isInfinity) findApproximation(Some(model), step / 10)
-            else if (prevModelError > modelError) {
-              println(s"label ${firstRow.label}, prev predict error $prevModelError, next predict error $modelError")
-              findApproximation(Some(model), step / 10)
-            } else _prevModel
-          case None => findApproximation(Some(model), step / 10)
-        }
-      }
-      val model = findApproximation(None, initialStep)
-
-      val featuresGrouped = poly1DataLabeledPointsRDD.collect().groupBy(_.features(0))
-      val calculatePrediction = udf[Double, Double](power1 => model.predict(featuresGrouped(power1)(0).features))
-      val poly1DataAugmented = poly1Data.withColumn(s"predicted", calculatePrediction(poly1Data("power_1")))
-
-      poly1DataAugmented.show()
-
-      renderGraph(poly1DataAugmented)
-      poly1DataAugmented
-    }
-
-    def renderPlot(title: String, xAxis: String)(df: DataFrame): Unit = {
-      val series1: Series = Series(df.select(xAxis, "price").collect().zipWithIndex.collect { case (row, idx) if idx % 100 == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
-      val series2: Series = Series(df.select(xAxis, "predicted").collect().zipWithIndex.collect { case (row, idx) if idx % 100 == 0 => Data(row.getAs[Double](0), row.getAs[Double](1)) }, chart = Some(SeriesType.scatter))
-
-      val chart = Highchart(Seq(series1, series2), chart = Some(Chart(zoomType = Some(Zoom.xy))), yAxis = None, title = Some(Title(title)))
-      plot(chart)
-    }
 
 //    buildPlot(
 //      kcHouseData.select("sqft_living", "price"),
@@ -192,7 +198,7 @@ object Assignment {
       val testDataAugmented = Regression.predict(testDataPol, features, weights)
       val validationDataAugmented = Regression.predict(validationDataPol, features, weights)
       println(s"----------- $idx")
-      renderPlot(idx.toString, "sqft_living")(validationDataAugmented)
+      renderPlot(idx.toString, "sqft_living", "price")(validationDataAugmented)
       println(s"weights $weights")
       println(s"RSS train ${calculateRSS(trainDataAugmented)}")
       println(s"RSS validation ${calculateRSS(validationDataAugmented)}")
