@@ -30,7 +30,9 @@ object Regression {
     Math.sqrt((observations, predictions).zipped.map(_-_).map(Math.pow(_, 2)).sum / observations.size)
   }
 
-  @tailrec def regressionGradientDescent(df: DataFrame, observations: List[Double], initialWeights: List[Double], stepSize: Double, errorDiffThreshold: Double, currentStep: Option[Int] = None, maxSteps: Option[Int] = None): List[Double] = {
+  val correction = 100000
+
+  @tailrec def regressionGradientDescent(df: DataFrame, observations: List[Double], initialWeights: List[Double], historicalWeights: List[List[Double]], stepSize: Double, errorDiffThreshold: Double, currentStep: Option[Int] = None, maxSteps: Option[Int] = None): List[Double] = {
     val _initialWeights = if (initialWeights.size == df.columns.length) initialWeights else List.fill(df.columns.length)(0d)
     val predictions: List[Double] = predictOutcome(df, _initialWeights)
     val errors: List[Double] = (predictions, observations).zipped.map { case (prediction, output) => output - prediction }
@@ -44,19 +46,27 @@ object Regression {
         initialWeight - stepSize * partial
     }
 
+    val weightsDiff = _initialWeights.zip(updatedWeights).map { case (initial, updated) => (initial - updated) * correction }
+    val _updatedWeights = if (currentStep.getOrElse(0) > 10 && currentStep.getOrElse(0) % 10 == 0) {
+      println("---------")
+      println(historicalWeights.takeRight(10))
+      println("---------")
+      initialWeights.zip(weightsDiff).map{case (x,y) => x-y}
+    } else updatedWeights
+
     val rmse = RMSE(df, observations, _initialWeights)
     val rmseWithUpdatedWeights = RMSE(df, observations, updatedWeights)
 
     val errorDiff = rmse - rmseWithUpdatedWeights
 //    val gradientMagnitude = Math.sqrt(partials.map(Math.pow(_, 2)).sum)
-    println(s"error diff $errorDiff weights ${_initialWeights}")
+    println(s"error diff $errorDiff weights ${_initialWeights}, weight diff ${(_initialWeights, _updatedWeights).zip.map{_ - _}")
 //    println(s"gradient magnitude $gradientMagnitude, weights ${_initialWeights}")
 
     if (errorDiff > 0 && errorDiff > errorDiffThreshold) {
-      if (currentStep.getOrElse(0) >= maxSteps.getOrElse(Int.MaxValue)) _initialWeights else regressionGradientDescent(df, observations, updatedWeights, stepSize, errorDiffThreshold, Some(currentStep.getOrElse(0) + 1), maxSteps)
+      if (currentStep.getOrElse(0) >= maxSteps.getOrElse(Int.MaxValue)) _initialWeights else regressionGradientDescent(df, observations, _updatedWeights, historicalWeights ::: _updatedWeights :: List[List[Double]](), stepSize, errorDiffThreshold, Some(currentStep.getOrElse(0) + 1), maxSteps)
     }
-    else if (errorDiff < 0) { println(s"adjusting step $stepSize"); regressionGradientDescent(df, observations, _initialWeights, stepSize / 10, errorDiffThreshold, currentStep, maxSteps) }
-    else { println(s"weights found ${_initialWeights} with error diff $errorDiff"); _initialWeights }
+    else if (errorDiff < 0) { println(s"adjusting step $stepSize"); regressionGradientDescent(df, observations, _initialWeights, historicalWeights, stepSize / 10, errorDiffThreshold, currentStep, maxSteps) }
+    else { println(s"weights found ${_initialWeights} with error diff $errorDiff. Steps required ${currentStep.getOrElse(0)}"); _initialWeights }
   }
 
   def predict(df: DataFrame, columns: List[String], weights: List[Double]): DataFrame = {

@@ -193,7 +193,7 @@ object Assignment {
 
     (1 to 16 by 1).foreach { idx =>
       val features = (0 to idx).map("power_"+_).toList
-      val weights = Regression.regressionGradientDescent(trainDataPol.select(features.head, features.tail: _*), extractDoubleList(trainDataPol, "price"), List.fill(idx-1)(0d) ::: 100d :: Nil, 0.00001, 0.00000001, maxSteps = Some(100))
+      val weights = Regression.regressionGradientDescent(trainDataPol.select(features.head, features.tail: _*), extractDoubleList(trainDataPol, "price"), List.fill(idx-1)(0d) ::: 100d :: Nil, Nil, 0.00001, 0.00000001, maxSteps = Some(100))
       val trainDataAugmented = Regression.predict(trainDataPol, features, weights)
       val testDataAugmented = Regression.predict(testDataPol, features, weights)
       val validationDataAugmented = Regression.predict(validationDataPol, features, weights)
