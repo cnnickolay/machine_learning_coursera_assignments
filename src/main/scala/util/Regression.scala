@@ -30,7 +30,7 @@ object Regression {
     Math.sqrt((observations, predictions).zipped.map(_-_).map(Math.pow(_, 2)).sum / observations.size)
   }
 
-  val correction = 100000
+  val correction = 1000000
 
   @tailrec def regressionGradientDescent(df: DataFrame, observations: List[Double], initialWeights: List[Double], historicalWeights: List[List[Double]], stepSize: Double, errorDiffThreshold: Double, currentStep: Option[Int] = None, maxSteps: Option[Int] = None): List[Double] = {
     val _initialWeights = if (initialWeights.size == df.columns.length) initialWeights else List.fill(df.columns.length)(0d)
@@ -47,19 +47,26 @@ object Regression {
     }
 
     val weightsDiff = _initialWeights.zip(updatedWeights).map { case (initial, updated) => (initial - updated) * correction }
-    val _updatedWeights = if (currentStep.getOrElse(0) > 10 && currentStep.getOrElse(0) % 10 == 0) {
-      println("---------")
-      println(historicalWeights.takeRight(10))
-      println("---------")
-      initialWeights.zip(weightsDiff).map{case (x,y) => x-y}
+    //    val _updatedWeights = if (currentStep.getOrElse(0) > 10 && currentStep.getOrElse(0) % 20 == 0) {
+    //      println("---------")
+    val _updatedWeights = if (historicalWeights.size >= 3) {
+      val beforeLast = historicalWeights.reverse.tail.head
+      val current = (_initialWeights, updatedWeights).zipped.map((x, y) => Math.abs(x - y))
+      val prev = (beforeLast, _initialWeights).zipped.map((x, y) => Math.abs(x - y))
+      val percentChange = (current, prev).zipped.map((y, x) => x / y * 100)
+      val diff = percentChange.map(Math.round).map(_ - 100).sum
+      if (diff == 0) {
+        println("---------")
+        initialWeights.zip(weightsDiff).map { case (x, y) => x - y }
+      } else updatedWeights
     } else updatedWeights
 
     val rmse = RMSE(df, observations, _initialWeights)
     val rmseWithUpdatedWeights = RMSE(df, observations, updatedWeights)
 
     val errorDiff = rmse - rmseWithUpdatedWeights
-//    val gradientMagnitude = Math.sqrt(partials.map(Math.pow(_, 2)).sum)
-    println(s"error diff $errorDiff weights ${_initialWeights}, weight diff ${(_initialWeights, _updatedWeights).zip.map{_ - _}")
+    val gradientMagnitude = Math.sqrt(partials.map(Math.pow(_, 2)).sum)
+    println(s"magnitude $gradientMagnitude, error diff $errorDiff weights ${_initialWeights}")
 //    println(s"gradient magnitude $gradientMagnitude, weights ${_initialWeights}")
 
     if (errorDiff > 0 && errorDiff > errorDiffThreshold) {
