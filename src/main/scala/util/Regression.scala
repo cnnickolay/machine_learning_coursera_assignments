@@ -46,10 +46,9 @@ object Regression {
         initialWeight - stepSize * partial
     }
 
+    val step = historicalWeights.size
     val weightsDiff = _initialWeights.zip(updatedWeights).map { case (initial, updated) => (initial - updated) * correction }
-    //    val _updatedWeights = if (currentStep.getOrElse(0) > 10 && currentStep.getOrElse(0) % 20 == 0) {
-    //      println("---------")
-    val _updatedWeights = if (historicalWeights.size >= 3) {
+    val _updatedWeights = if (step >= 3) {
       val beforeLast = historicalWeights.reverse.tail.head
       val current = (_initialWeights, updatedWeights).zipped.map((x, y) => Math.abs(x - y))
       val prev = (beforeLast, _initialWeights).zipped.map((x, y) => Math.abs(x - y))
@@ -66,7 +65,7 @@ object Regression {
 
     val errorDiff = rmse - rmseWithUpdatedWeights
     val gradientMagnitude = Math.sqrt(partials.map(Math.pow(_, 2)).sum)
-    println(s"magnitude $gradientMagnitude, error diff $errorDiff weights ${_initialWeights}")
+    println(s"$step. magnitude $gradientMagnitude, error diff $errorDiff weights ${_initialWeights}")
 //    println(s"gradient magnitude $gradientMagnitude, weights ${_initialWeights}")
 
     if (errorDiff > 0 && errorDiff > errorDiffThreshold) {
