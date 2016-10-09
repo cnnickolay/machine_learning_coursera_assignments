@@ -1,6 +1,7 @@
 package regression_week_2
 
 import org.apache.spark.sql.functions.{lit, _}
+import org.apache.spark.sql.internal.SQLConf.SQLConfigBuilder
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, SQLContext}
 import org.apache.spark.{SparkConf, SparkContext}

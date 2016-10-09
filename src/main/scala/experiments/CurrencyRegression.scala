@@ -43,9 +43,10 @@ object CurrencyRegression {
       .schema(customSchema)
       .load(csv)
 
+/*
     List("01", "02", "03", "04", "07", "08", "09", "10", "11",  "14", "15", "16", "17", "18", "21", "22", "23", "24", "25", "28", "29", "30", "31")
       .foreach { value =>
-        val rawDf = _rawDf.filter(row => row.getAs[String]("date").startsWith(s"201512$value"))
+        val rawDf = _rawDf.rdd.filter(row => row.getAs[String]("date").startsWith(s"201512$value"))
 
         val dateFormatter = new SimpleDateFormat("yyyyMMdd HHmmssSSS")
 
@@ -65,6 +66,7 @@ object CurrencyRegression {
         val assembler = new VectorAssembler()
 
         val dfPrepared1 = assembler.setInputCols((1 to 10).map(i => s"power_$i").toArray).setOutputCol("features1").transform(df)
+        dfPrepared1.withColumn("fuckoff", dfPrepared1("wer"))
         val dfPrepared2 = assembler.setInputCols((1 to 5).map(i => s"power_$i").toArray).setOutputCol("features2").transform(dfPrepared1)
 
         val lr = new LinearRegression()
@@ -72,13 +74,19 @@ object CurrencyRegression {
           .setRegParam(0)
           .setElasticNetParam(0)
           .setFitIntercept(true)
+          .setStandardization(true)
+
 
         val model1 = lr.setFeaturesCol("features1").setPredictionCol("prediction1").fit(dfPrepared2)
+        model1.coefficients
         val model2 = lr.setFeaturesCol("features2").setPredictionCol("prediction2").fit(dfPrepared2)
         val dfAugmented1 = model1.transform(dfPrepared2)
         val dfAugmented2 = model2.transform(dfAugmented1)
+        dfAugmented1.rdd.collect().toList.zipWithIndex.collect{case (x, idx) if idx % 100 == 0 => x}.foreach(r => r.getAs(""))
+        dfAugmented1.sort(asc("col1"))
 
         renderPlot(100, value, "date_norm", "label", "prediction1", "prediction2")(dfAugmented2)
       }
+*/
   }
 }
