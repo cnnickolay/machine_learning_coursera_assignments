@@ -1,4 +1,8 @@
 import java.lang.Math.pow
+import org.apache.spark.sql.functions.{lit, _}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{Column, DataFrame, SQLContext}
+import org.apache.spark.{SparkConf, SparkContext}
 
 import org.apache.spark.ml.feature.{PCA, VectorAssembler}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair}
@@ -45,6 +49,10 @@ object SimpleTest {
     ))
     val df = sqlContext.createDataFrame(rdd, structure)
 
+    val sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val dateToMsec = udf[Double, String](date => sdf.parse(date).getTime())
+    df.withColumn("test", dateToMsec(df("bucketDate"))).show()
+
     val predictionColumns = List("const", "x", "x2", "x3", "x4", "x5")
     val assembler = new VectorAssembler()
       .setInputCols(predictionColumns.toArray)
@@ -63,6 +71,7 @@ object SimpleTest {
     val augmentedDf = model.transform(transformedDf)
 
     augmentedDf.show()
+    val table = augmentedDf.select("x", "y").rdd.collect().map(row => row.mkString("\t")).reduce((x, y) => s"$x\n$y")
 
     Regression.renderPlot("test", "x", "y", "prediction", 1)(augmentedDf)
 
