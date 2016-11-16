@@ -8,11 +8,22 @@ import com.quantifind.charts.highcharts._
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.annotation.tailrec
+import scala.concurrent.Future
+import java.text.SimpleDateFormat
+
+import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
+import org.apache.spark.{SparkConf, SparkContext}
+import java.time._
 
 
 object CurrencyRegression {
@@ -31,6 +42,10 @@ object CurrencyRegression {
     val conf = new SparkConf().setAppName("Simple Application").setMaster("local[6]")
     val sc = new SparkContext(conf)
     val sqlContext = SparkSession.builder().getOrCreate()
+    import sqlContext.implicits._
+
+//    val rdd = sc.parallelize(List(2, 2, 3, 4)
+//    rdd.toDF()
 
     val customSchema = StructType(Array(
       StructField("date", StringType, nullable = false),
@@ -76,6 +91,7 @@ object CurrencyRegression {
           .setFitIntercept(true)
           .setStandardization(true)
 
+        rawDf.filter($"label" === $"prediction").count
 
         val model1 = lr.setFeaturesCol("features1").setPredictionCol("prediction1").fit(dfPrepared2)
         model1.coefficients
