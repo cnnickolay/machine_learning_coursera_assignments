@@ -2,7 +2,6 @@ package experiments
 
 import experiments.KNN._
 
-import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
 object BTCExperiment extends App {
@@ -16,6 +15,14 @@ object BTCExperiment extends App {
   val minutes = (ticksToMinutes zip fluctuations).par.groupBy{case (minute, fluctuation) => minute}.mapValues( list => list.map(_._2) ).toList.sortBy(_._1)
   println(s"Days ${minutes.size / 60 / 24}")
   val fluctuationsMinutes = minutes.par.map{ case (minute, values) => values.sum / values.size }.toList
+
+  val ticksToHours = ticks.par.map{ tick => tick / 1000 / 60 / 60 }.toList
+  val hours = (ticksToHours zip fluctuations).par.groupBy{case (hour, fluctuation) => hour}.mapValues( list => list.map(_._2) ).toList.sortBy(_._1)
+  val fluctuationsHours = hours.par.map{ case (hour, values) => values.sum / values.size }.toList
+  val changes = 0d :: (fluctuations sliding 2).toList.map { case (prev :: cur :: Nil) => cur - prev }
+  val changesToHours = (changes zip ticksToHours).groupBy { case (change, tick) => tick }.mapValues(list => list.map(_._1))
+  val positiveChangesByHour = changesToHours.par.map{ case (_, periodChanges) => val totalChanges = periodChanges.filter(_ > 0); totalChanges.sum / totalChanges.size }
+  val negativeChangesByHour = changesToHours.par.map{ case (_, periodChanges) => val totalChanges = periodChanges.filter(_ < 0); totalChanges.sum / totalChanges.size }
 
   val input = fluctuationsMinutes
 
